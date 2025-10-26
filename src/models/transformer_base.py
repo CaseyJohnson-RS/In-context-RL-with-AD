@@ -35,6 +35,13 @@ class TransformerBase(nn.Module, ABC):
     ):
         super().__init__()
 
+        self.n_actions = n_actions
+        self.d_model = d_model
+        self.nhead = nhead
+        self.num_layers = num_layers
+        self.dim_feedforward = dim_feedforward
+        self.max_len = max_len
+
         # Transformer Encoder
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
