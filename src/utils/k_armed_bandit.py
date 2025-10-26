@@ -2,7 +2,7 @@ from typing import List, Tuple
 
 from src.models import ThompsonSampling
 from src.environments import KArmedBandit
-from . import set_seed
+from .common import set_seed
 
 
 def generate_karmedbandit_traces(
