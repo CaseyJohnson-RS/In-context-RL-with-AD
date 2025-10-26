@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.utils import generate_karmedbandit_traces 
+from src.utils import karmedbandit_generate_traces 
 
 
 # ======== Вспомогательные классы для тестов ========
@@ -50,7 +50,7 @@ def patch_bandit_and_agent(monkeypatch):
 
 def test_output_structure():
     """Проверяет, что функция возвращает корректную структуру данных."""
-    trajectories = generate_karmedbandit_traces(
+    trajectories = karmedbandit_generate_traces(
         num_tasks=3,
         K=5,
         T_per_task=10,
@@ -76,8 +76,8 @@ def test_reproducibility():
     def sampler(K):
         return np.random.normal(0, 1, size=K)
 
-    traj1 = generate_karmedbandit_traces(2, 3, 5, sampler, seed=123)
-    traj2 = generate_karmedbandit_traces(2, 3, 5, sampler, seed=123)
+    traj1 = karmedbandit_generate_traces(2, 3, 5, sampler, seed=123)
+    traj2 = karmedbandit_generate_traces(2, 3, 5, sampler, seed=123)
 
     assert traj1 == traj2, "Результаты должны быть идентичны при одинаковом сиде"
 
@@ -87,8 +87,8 @@ def test_different_seeds_produce_different_results():
     def sampler(K):
         return np.random.normal(0, 1, size=K)
 
-    traj1 = generate_karmedbandit_traces(1, 3, 5, sampler, seed=1)
-    traj2 = generate_karmedbandit_traces(1, 3, 5, sampler, seed=2)
+    traj1 = karmedbandit_generate_traces(1, 3, 5, sampler, seed=1)
+    traj2 = karmedbandit_generate_traces(1, 3, 5, sampler, seed=2)
 
     assert traj1 != traj2, "Разные сиды должны давать разные траектории"
 
@@ -96,7 +96,7 @@ def test_different_seeds_produce_different_results():
 def test_actions_within_range():
     """Проверяет, что все действия в допустимом диапазоне."""
     K = 4
-    trajectories = generate_karmedbandit_traces(
+    trajectories = karmedbandit_generate_traces(
         num_tasks=1,
         K=K,
         T_per_task=10,
@@ -111,7 +111,7 @@ def test_actions_within_range():
 
 def test_no_side_effects_between_tasks():
     """Проверяет, что агент и среда не влияют на следующие задачи."""
-    trajectories = generate_karmedbandit_traces(
+    trajectories = karmedbandit_generate_traces(
         num_tasks=2,
         K=3,
         T_per_task=5,

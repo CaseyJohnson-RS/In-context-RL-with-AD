@@ -5,7 +5,7 @@ from src.environments import KArmedBandit
 from .common import set_seed
 
 
-def generate_karmedbandit_traces(
+def karmedbandit_generate_traces(
     num_tasks: int,
     K: int,
     T_per_task: int,
