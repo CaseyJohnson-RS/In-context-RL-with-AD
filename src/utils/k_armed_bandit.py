@@ -61,7 +61,7 @@ def generate_karmedbandit_traces(
     return trajectories
 
 
-def trajectories_to_sequences(
+def karmedbandit_trajectories_to_sequences(
     trajectories: List[List[Tuple[int, float]]],
     seq_len: int
 ) -> List[Tuple[List[int], List[float], int]]:

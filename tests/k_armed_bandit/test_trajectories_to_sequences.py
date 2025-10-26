@@ -1,6 +1,6 @@
 import pytest
 from typing import List, Tuple
-from src.utils import trajectories_to_sequences 
+from src.utils import karmedbandit_trajectories_to_sequences 
 
 
 # ======== Вспомогательные данные ========
@@ -24,7 +24,7 @@ def multiple_trajectories() -> List[List[Tuple[int, float]]]:
 
 def test_output_structure(simple_trajectory):
     """Функция должна возвращать список кортежей (actions, rewards, target)."""
-    seqs = trajectories_to_sequences(simple_trajectory, seq_len=3)
+    seqs = karmedbandit_trajectories_to_sequences(simple_trajectory, seq_len=3)
 
     assert isinstance(seqs, list)
     assert all(isinstance(item, tuple) and len(item) == 3 for item in seqs)
@@ -38,7 +38,7 @@ def test_output_structure(simple_trajectory):
 
 def test_sliding_window(simple_trajectory):
     """Проверка, что окно скользит корректно."""
-    seqs = trajectories_to_sequences(simple_trajectory, seq_len=2)
+    seqs = karmedbandit_trajectories_to_sequences(simple_trajectory, seq_len=2)
 
     # Исходная траектория длиной 5 → должно быть 4 обучающих примера
     assert len(seqs) == 4
@@ -52,7 +52,7 @@ def test_sliding_window(simple_trajectory):
 
 def test_padding_behavior(simple_trajectory):
     """Проверяет корректный padding, когда seq_len больше длины истории."""
-    seqs = trajectories_to_sequences(simple_trajectory, seq_len=10)
+    seqs = karmedbandit_trajectories_to_sequences(simple_trajectory, seq_len=10)
 
     actions, rewards, target = seqs[0]
     pad_count = 10 - 1  # при первом шаге только 1 действие в истории
@@ -66,7 +66,7 @@ def test_padding_behavior(simple_trajectory):
 
 def test_multiple_trajectories(multiple_trajectories):
     """Проверяет, что функция корректно обрабатывает несколько траекторий."""
-    seqs = trajectories_to_sequences(multiple_trajectories, seq_len=2)
+    seqs = karmedbandit_trajectories_to_sequences(multiple_trajectories, seq_len=2)
 
     # Траектория 1 длиной 3 → 2 примера, траектория 2 длиной 2 → 1 пример
     assert len(seqs) == 3
@@ -79,7 +79,7 @@ def test_multiple_trajectories(multiple_trajectories):
 
 def test_target_correctness(simple_trajectory):
     """Проверяет, что целевое действие соответствует следующему по времени."""
-    seqs = trajectories_to_sequences(simple_trajectory, seq_len=3)
+    seqs = karmedbandit_trajectories_to_sequences(simple_trajectory, seq_len=3)
     traj = simple_trajectory[0]
 
     # Цель каждого примера должна совпадать с действием из оригинальной траектории на позиции t
@@ -91,5 +91,5 @@ def test_target_correctness(simple_trajectory):
 def test_empty_trajectory_handling():
     """Проверяет корректную обработку пустых или коротких траекторий."""
     trajectories = [[]]  # одна пустая траектория
-    seqs = trajectories_to_sequences(trajectories, seq_len=5)
+    seqs = karmedbandit_trajectories_to_sequences(trajectories, seq_len=5)
     assert seqs == [], "Пустая траектория не должна порождать обучающих примеров"
