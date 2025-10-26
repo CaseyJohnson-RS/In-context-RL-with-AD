@@ -1,9 +1,12 @@
 from typing import List, Tuple
 import torch
+from torch import nn, optim
+import mlflow
+import time
 
 from src.models import ThompsonSampling
 from src.environments import KArmedBandit
-from .common import set_seed
+from .common import set_seed, batch_iterator
 
 
 def karmedbandit_generate_traces(
@@ -178,3 +181,98 @@ def karmedbandit_run_in_context(
         rewards_seq = rewards_seq[1:] + [reward]
 
     return total_reward
+
+
+def karmedbandit_train(
+    model,
+    seqs,
+    batch_size: int = 64,
+    epochs: int = 50,
+    lr: float = 1e-3,
+    device: str = "cpu",
+    verbose: bool = True,
+    cosine_decay: bool = True,
+):
+    """
+    Обучает трансформер в режиме Action-Decision (AD),
+    логируя метрики в активный эксперимент MLflow, если он уже запущен.
+
+    Параметры
+    ----------
+    model : [ARAddTransformer, ARConcatTransformer, ARMultiplyTransformer]
+        Обучаемая трансформерная AR модель.
+    seqs : list[tuple]
+        Список обучающих примеров: (actions, rewards, targets).
+    batch_size : int, default=64
+        Размер батча.
+    epochs : int, default=50
+        Количество эпох.
+    lr : float, default=1e-3
+        Learning rate для оптимизатора Adam.
+    device : str, default='cpu'
+        Устройство для вычислений ('cpu' или 'cuda').
+    verbose : bool, default=True
+        Если True — печатает ход обучения.
+    cosine_decay : bool, default=True
+        Если True — используется CosineAnnealingLR scheduler.
+
+    Возвращает
+    ----------
+    model : nn.Module
+        Обученная модель.
+    loss_history : list[float]
+        Список средних потерь по эпохам.
+    """
+
+    model.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.CrossEntropyLoss()
+
+    scheduler = (
+        optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.1)
+        if cosine_decay
+        else None
+    )
+
+    mlflow_active = mlflow.active_run() is not None  # проверяем, активен ли run
+
+    for epoch in range(1, epochs + 1):
+        model.train()
+        start_time = time.time()
+        total_loss = 0.0
+        batch_count = 0
+
+        for actions_b, rewards_b, targets_b in batch_iterator(
+            seqs, batch_size, device=device, shuffle=True
+        ):
+            logits = model(actions_b, rewards_b)
+            loss = criterion(logits, targets_b)
+
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+
+            total_loss += float(loss.item())
+            batch_count += 1
+
+        if scheduler is not None:
+            scheduler.step()
+
+        avg_loss = total_loss / max(batch_count, 1)
+
+        # Логирование в MLflow, если есть активный run
+        if mlflow_active:
+            mlflow.log_metric("train_loss", avg_loss, step=epoch)
+            mlflow.log_metric("learning_rate", optimizer.param_groups[0]["lr"], step=epoch)
+
+        if verbose:
+            elapsed = time.time() - start_time
+            print(
+                f"Epoch {epoch:3d}/{epochs} | "
+                f"Loss: {avg_loss:.4f} | "
+                f"LR: {optimizer.param_groups[0]['lr']:.6f} | "
+                f"Time: {elapsed:.1f}s"
+            )
+
+    return model
