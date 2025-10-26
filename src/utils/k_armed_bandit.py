@@ -1,6 +1,8 @@
 from typing import List, Tuple
-import torch
+from collections import defaultdict
 from torch import nn, optim
+import torch
+import numpy as np
 import mlflow
 import time
 
@@ -10,11 +12,7 @@ from .common import set_seed, batch_iterator
 
 
 def karmedbandit_generate_traces(
-    num_tasks: int,
-    K: int,
-    T_per_task: int,
-    mu_sampler,
-    seed: int = 0
+    num_tasks: int, K: int, T_per_task: int, mu_sampler, seed: int = 0
 ) -> List[List[Tuple[int, float]]]:
     """
     Генерация траекторий "учителя" для задач K-armed bandit
@@ -66,8 +64,7 @@ def karmedbandit_generate_traces(
 
 
 def karmedbandit_trajectories_to_sequences(
-    trajectories: List[List[Tuple[int, float]]],
-    seq_len: int
+    trajectories: List[List[Tuple[int, float]]], seq_len: int
 ) -> List[Tuple[List[int], List[float], int]]:
     """
     Формирует обучающие последовательности для трансформера из списка траекторий,
@@ -129,7 +126,7 @@ def karmedbandit_run_in_context(
     mus: List[float],
     T: int,
     device: str = "cpu",
-    seq_len: int = 20
+    seq_len: int = 20,
 ) -> float:
     """
     Запуск обученного трансформера в среде KArmedBandit, возвращает суммарную награду.
@@ -160,11 +157,14 @@ def karmedbandit_run_in_context(
     actions_seq = [0] * seq_len
     rewards_seq = [0.0] * seq_len
     total_reward = 0.0
+    reward_history = []
 
     for _ in range(T):
         # Подготовка батча размером 1
         a_tensor = torch.tensor([actions_seq], dtype=torch.long, device=device)
-        r_tensor = torch.tensor([rewards_seq], dtype=torch.float32, device=device).unsqueeze(-1)
+        r_tensor = torch.tensor(
+            [rewards_seq], dtype=torch.float32, device=device
+        ).unsqueeze(-1)
 
         # Предсказание действия трансформером
         with torch.no_grad():
@@ -175,12 +175,13 @@ def karmedbandit_run_in_context(
         # Шаг в среде и накопление награды
         reward = env.step(action)
         total_reward += reward
+        reward_history.append(total_reward)
 
         # Обновление контекста
         actions_seq = actions_seq[1:] + [action]
         rewards_seq = rewards_seq[1:] + [reward]
 
-    return total_reward
+    return reward_history, total_reward
 
 
 def karmedbandit_train(
@@ -264,7 +265,9 @@ def karmedbandit_train(
         # Логирование в MLflow, если есть активный run
         if mlflow_active:
             mlflow.log_metric("train_loss", avg_loss, step=epoch)
-            mlflow.log_metric("learning_rate", optimizer.param_groups[0]["lr"], step=epoch)
+            mlflow.log_metric(
+                "learning_rate", optimizer.param_groups[0]["lr"], step=epoch
+            )
 
         if verbose:
             elapsed = time.time() - start_time
