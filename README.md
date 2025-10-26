@@ -8,5 +8,5 @@ This repository is dedicated to the study of learning algorithm distillation.
 
 Start MLFlow server:
 ```bash
-mlflow server   --backend-store-uri "file:///C:/Users/Casey/Desktop/In-context RL with AD/models/data_local"   --default-artifact-root "file:///C:/Users/Casey/Desktop/In-context RL with AD/models/artifacts"   --host localhost   --port 5000
+mlflow server   --backend-store-uri "file:///C:/Users/Casey/Desktop/In-context RL with AD/mlflow/data_local"   --default-artifact-root "file:///C:/Users/Casey/Desktop/In-context RL with AD/mlflow/artifacts"   --host localhost   --port 5000
 ```
