@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.utils.k_armer_bandit import generate_karmedbandit_traces 
+from src.utils import generate_karmedbandit_traces 
 
 
 # ======== Вспомогательные классы для тестов ========
