@@ -1,4 +1,5 @@
 from typing import List, Tuple
+import torch
 
 from src.models import ThompsonSampling
 from src.environments import KArmedBandit
@@ -118,3 +119,62 @@ def karmedbandit_trajectories_to_sequences(
             sequences.append((actions, rewards, target_action))
 
     return sequences
+
+
+def karmedbandit_run_in_context(
+    model: torch.nn.Module,
+    mus: List[float],
+    T: int,
+    device: str = "cpu",
+    seq_len: int = 20
+) -> float:
+    """
+    Запуск обученного трансформера в среде KArmedBandit, возвращает суммарную награду.
+
+    Параметры
+    ----------
+    model : nn.Module
+        Обученный трансформер, принимающий тензоры (actions, rewards) и выдающий логиты.
+    mus : list or array_like, shape (K,)
+        Средние награды для K рук (arms) в задаче.
+    T : int
+        Длина генерируемой траектории.
+    device : str или torch.device, optional
+        Устройство для вычислений ('cpu' или 'cuda').
+    seq_len : int, optional
+        Максимальная длина контекстной последовательности для модели.
+
+    Возвращает
+    ----------
+    total_reward : float
+        Суммарная награда за все T шагов в среде.
+    """
+    model.eval()
+    K = len(mus)
+    env = KArmedBandit(K, mus)
+
+    # Инициализация контекста
+    actions_seq = [0] * seq_len
+    rewards_seq = [0.0] * seq_len
+    total_reward = 0.0
+
+    for _ in range(T):
+        # Подготовка батча размером 1
+        a_tensor = torch.tensor([actions_seq], dtype=torch.long, device=device)
+        r_tensor = torch.tensor([rewards_seq], dtype=torch.float32, device=device).unsqueeze(-1)
+
+        # Предсказание действия трансформером
+        with torch.no_grad():
+            logits = model(a_tensor, r_tensor)  # (1, K)
+            probs = torch.softmax(logits, dim=-1)
+            action = int(torch.multinomial(probs, num_samples=1).item())
+
+        # Шаг в среде и накопление награды
+        reward = env.step(action)
+        total_reward += reward
+
+        # Обновление контекста
+        actions_seq = actions_seq[1:] + [action]
+        rewards_seq = rewards_seq[1:] + [reward]
+
+    return total_reward
