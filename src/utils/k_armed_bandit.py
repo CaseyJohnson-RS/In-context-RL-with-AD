@@ -127,7 +127,7 @@ def karmedbandit_run_in_context(
     T: int,
     device: str = "cpu",
     seq_len: int = 20,
-) -> float:
+) -> Tuple[List[float], float]:
     """
     Запуск обученного трансформера в среде KArmedBandit, возвращает суммарную награду.
 
