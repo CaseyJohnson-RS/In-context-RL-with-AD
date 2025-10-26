@@ -311,9 +311,14 @@ class KArmedBanditTrainer:
         for actions_b, rewards_b, targets_b in batch_iterator(
             self.seqs, self.batch_size, device=self.device, shuffle=True
         ):
-            logits = self.model(actions_b, rewards_b)
+            logits = self.model(actions_b, rewards_b)  # (B, n_actions)
+            
+            # Модель предсказывает только следующее действие, значит цель — это targets_b[:, -1]
+            if targets_b.ndim > 1:
+                targets_b = targets_b[:, -1]
+            
             loss = self.criterion(logits, targets_b)
-
+            
             self.optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
