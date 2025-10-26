@@ -56,24 +56,7 @@ def test_train_epoch_runs():
     assert trainer.epoch == 1
 
 
-# --- Тест 3: несколько эпох подряд ---
-def test_train_epochs_runs_multiple_times(monkeypatch):
-    model = DummyModel()
-    seqs = generate_dummy_seqs()
-    trainer = KArmedBanditTrainer(model, seqs, lr=1e-3, batch_size=16, device="cpu")
-
-    # Подменяем train_epoch, чтобы ускорить тест
-    called = []
-    def fake_train_epoch(verbose):
-        called.append(True)
-        return 0.123
-    monkeypatch.setattr(trainer, "train_epoch", fake_train_epoch)
-
-    trainer.train_epochs(epochs=3)
-    assert len(called) == 3
-
-
-# --- Тест 4: устройство cuda при наличии GPU ---
+# --- Тест 3: устройство cuda при наличии GPU ---
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 def test_trainer_on_cuda():
     model = DummyModel().to("cuda")

@@ -343,11 +343,3 @@ class KArmedBanditTrainer:
             )
 
         return avg_loss
-
-    def train_epochs(self, epochs: int, verbose: bool = True):
-        """
-        Выполняет несколько эпох подряд.
-        """
-        for _ in range(epochs):
-            self.train_epoch(verbose=verbose)
-        return self.loss_history
