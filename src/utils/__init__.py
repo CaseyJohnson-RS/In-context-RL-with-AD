@@ -1,4 +1,4 @@
-from .k_armer_bandit import generate_karmedbandit_traces
+from .k_armed_bandit import generate_karmedbandit_traces
 
 __all__ = [
     "generate_karmedbandit_traces"
