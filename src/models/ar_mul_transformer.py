@@ -75,6 +75,7 @@ class ARMultiplyTransformer(TransformerBase):
 
         x = self.emb(x)  # (B, L, d_model)
         x = self.pos_enc(x)
+        x = self.transformer(x)
         x = self.ln(x)
 
         # ----------------------
