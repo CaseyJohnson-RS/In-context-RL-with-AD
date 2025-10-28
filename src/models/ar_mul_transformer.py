@@ -48,9 +48,10 @@ class ARMultiplyTransformer(TransformerBase):
         # ----------------------
         self.pos_enc = PositionalEncoding(d_model, max_len=max_len)
 
+
     def forward(self, actions: torch.Tensor, rewards: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass.
+        Forward pass с каузальной маской.
 
         Параметры
         ----------
@@ -74,12 +75,32 @@ class ARMultiplyTransformer(TransformerBase):
         x = x * rewards  # (B, L, n_actions)
 
         x = self.emb(x)  # (B, L, d_model)
-        x = self.pos_enc(x)
-        x = self.transformer(x)
-        x = self.ln(x)
 
         # ----------------------
-        # Берём последний токен для предсказания следующего действия
+        # Создание каузальной маски для attention
+        # ----------------------
+        seq_len = x.size(1)  # L
+        # В PyTorch, для маски attention: 
+        # False (0) = разрешено смотреть
+        # True (1) = запрещено смотреть
+        # Маска размера (seq_len, seq_len)
+        causal_mask = torch.ones((seq_len, seq_len), dtype=torch.bool, device=x.device).triu_(1)
+        
+        # Для TransformerEncoder маска должна быть float и иметь значения:
+        # 0.0 = разрешено смотреть
+        # -inf = запрещено смотреть
+        attn_mask = torch.zeros((seq_len, seq_len), device=x.device)
+        attn_mask.masked_fill_(causal_mask, float('-inf'))
+
+        # ----------------------
+        # Проход через трансформер с маской
+        # ----------------------
+        x = self.transformer(x, mask=attn_mask)  # (B, L, D)
+        x = self.ln(x)  # LayerNorm
+
+        # ----------------------
+        # Берём последний токен ДЕЙСТВИЯ для предсказания следующего
+        # Последний токен действия находится на позиции -1
         # ----------------------
         logits = self.head(x[:, -1, :])  # (B, n_actions)
         return logits

@@ -53,7 +53,7 @@ class ARConcatTransformer(TransformerBase):
 
     def forward(self, actions: torch.Tensor, rewards: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass.
+        Forward pass с каузальной маской.
 
         Параметры
         ----------
@@ -79,16 +79,38 @@ class ARConcatTransformer(TransformerBase):
         # ----------------------
         # Конкатенация action-reward в чередующуюся последовательность
         # (B, L, 2, D) -> (B, 2*L, D)
+        # Порядок: [a₁, r₁, a₂, r₂, ..., a_L, r_L]
         # ----------------------
-        x = torch.stack([a_e, r_e], dim=2)
-        x = x.reshape(B, L*2, D)
+        x = torch.stack([a_e, r_e], dim=2)  # (B, L, 2, D)
+        x = x.reshape(B, L * 2, D)          # (B, 2L, D)
 
-        x = self.pos_enc(x)
-        x = self.transformer(x)
-        x = self.ln(x)
+        x = self.pos_enc(x)  # Позиционная кодировка
+
+        # ----------------------
+        # Создание каузальной маски для attention
+        # ----------------------
+        seq_len = x.size(1)  # 2L
+        # В PyTorch, для маски attention: 
+        # False (0) = разрешено смотреть
+        # True (1) = запрещено смотреть
+        # Маска размера (seq_len, seq_len)
+        causal_mask = torch.ones((seq_len, seq_len), dtype=torch.bool, device=x.device).triu_(1)
+        
+        # Для TransformerEncoder маска должна быть float и иметь значения:
+        # 0.0 = разрешено смотреть
+        # -inf = запрещено смотреть
+        attn_mask = torch.zeros((seq_len, seq_len), device=x.device)
+        attn_mask.masked_fill_(causal_mask, float('-inf'))
+
+        # ----------------------
+        # Проход через трансформер с маской
+        # ----------------------
+        x = self.transformer(x, mask=attn_mask)  # (B, 2L, D)
+        x = self.ln(x)  # LayerNorm
 
         # ----------------------
         # Берём последний токен ДЕЙСТВИЯ для предсказания следующего
+        # Последний токен действия находится на позиции -2 (перед последним reward)
         # ----------------------
         logits = self.head(x[:, -2, :])  # (B, n_actions)
         return logits

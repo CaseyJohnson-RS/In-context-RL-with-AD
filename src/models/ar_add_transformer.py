@@ -47,10 +47,10 @@ class ARAddTransformer(TransformerBase):
         # Positional encoding
         # ----------------------
         self.pos_enc = PositionalEncoding(d_model, max_len=max_len)
-
+    
     def forward(self, actions: torch.Tensor, rewards: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass.
+        Forward pass с каузальной маской.
 
         Параметры
         ----------
@@ -64,20 +64,38 @@ class ARAddTransformer(TransformerBase):
         logits : torch.Tensor, shape (B, n_actions)
             Предсказанные логиты для следующего действия.
         """
-        B, L = actions.shape
-
         a_e = self.action_emb(actions)       # (B, L, D)
         r_e = self.reward_emb(rewards)       # (B, L, D)
 
         x = a_e + r_e  # (B, L, D)
 
-        x = self.pos_enc(x)
-
-        x = self.transformer(x)
-        x = self.ln(x)
+        x = self.pos_enc(x)  # Позиционная кодировка
 
         # ----------------------
-        # Берём последний токен действия для предсказания следующего
+        # Создание каузальной маски для attention
+        # ----------------------
+        seq_len = x.size(1)  # L
+        # В PyTorch, для маски attention: 
+        # False (0) = разрешено смотреть
+        # True (1) = запрещено смотреть
+        # Маска размера (seq_len, seq_len)
+        causal_mask = torch.ones((seq_len, seq_len), dtype=torch.bool, device=x.device).triu_(1)
+        
+        # Для TransformerEncoder маска должна быть float и иметь значения:
+        # 0.0 = разрешено смотреть
+        # -inf = запрещено смотреть
+        attn_mask = torch.zeros((seq_len, seq_len), device=x.device)
+        attn_mask.masked_fill_(causal_mask, float('-inf'))
+
+        # ----------------------
+        # Проход через трансформер с маской
+        # ----------------------
+        x = self.transformer(x, mask=attn_mask)  # (B, L, D)
+        x = self.ln(x)  # LayerNorm
+
+        # ----------------------
+        # Берём последний токен ДЕЙСТВИЯ для предсказания следующего
+        # Последний токен действия находится на позиции -1
         # ----------------------
         logits = self.head(x[:, -1, :])  # (B, n_actions)
         return logits
