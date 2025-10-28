@@ -201,7 +201,8 @@ with mlflow.start_run(run_name=run_name):
         lr=CONFIG.lr,
         batch_size=CONFIG.batch_size,
         device=CONFIG.device,
-        cosine_decay=CONFIG.cosine_decay
+        cosine_decay=CONFIG.cosine_decay,
+        T_max=CONFIG.epochs,
     )
 
     for epoch in range(1, CONFIG.epochs + 1):
