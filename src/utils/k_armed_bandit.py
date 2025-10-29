@@ -277,7 +277,8 @@ class KArmedBanditTrainer:
         lr: float = 1e-3,
         device: str = "cpu",
         cosine_decay: bool = True,
-        T_max: int = 100
+        T_max: int = 100,
+        eta_min: float = 1e-4,
     ):
         """
         Инициализация тренера для трансформера в режиме Action-Decision (AD).
@@ -291,7 +292,7 @@ class KArmedBanditTrainer:
         self.criterion = nn.CrossEntropyLoss()
         self.scheduler = (
             optim.lr_scheduler.CosineAnnealingLR(
-                self.optimizer, T_max=T_max, eta_min=lr * 0.1
+                self.optimizer, T_max=T_max, eta_min=eta_min
             )
             if cosine_decay
             else None

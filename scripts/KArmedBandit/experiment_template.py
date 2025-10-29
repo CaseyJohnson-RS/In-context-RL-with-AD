@@ -53,6 +53,7 @@ class Config:
     lr: float
     eval_every_epochs: int
     cosine_decay: float
+    eta_min: float
 
     mlflow_server: str
     mlflow_port: int
@@ -83,6 +84,7 @@ CONFIG.epochs = 100
 CONFIG.lr = 1e-3
 CONFIG.eval_every_epochs = 5
 CONFIG.cosine_decay = True
+CONFIG.eta_min = 1e-5
 
 CONFIG.mlflow_server = "http://127.0.0.1"
 CONFIG.mlflow_port = 5000
@@ -203,6 +205,7 @@ with mlflow.start_run(run_name=run_name):
         device=CONFIG.device,
         cosine_decay=CONFIG.cosine_decay,
         T_max=CONFIG.epochs,
+        eta_min=CONFIG.eta_min,
     )
 
     for epoch in range(1, CONFIG.epochs + 1):
