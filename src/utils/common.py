@@ -102,3 +102,23 @@ def batch_iterator(
             raise ValueError(
                 f"Некорректный формат данных: ожидалось 3 или 4 элемента, получено {len(first)}."
             )
+
+
+def compute_returns(rewards, next_value, gamma=0.99):
+    """
+    Вычисляет discounted returns для эпизода или rollout'а.
+    
+    Args:
+        rewards (list[float | torch.Tensor]): список вознаграждений.
+        next_value (float | torch.Tensor): bootstrap значение (V(s_{t+1})).
+        gamma (float): коэффициент дисконтирования.
+
+    Returns:
+        torch.Tensor: тензор returns размером [len(rewards), 1].
+    """
+    R = next_value
+    returns = []
+    for r in reversed(rewards):
+        R = r + gamma * R
+        returns.insert(0, R)
+    return torch.stack(returns).detach()
