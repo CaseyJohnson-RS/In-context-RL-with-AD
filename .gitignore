@@ -5,5 +5,4 @@ ipynb/
 __pycache__/
 .vscode/
 .pytest_cache/
-**/experiment.py
 notes.txt

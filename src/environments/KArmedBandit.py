@@ -13,7 +13,7 @@ class KArmedBandit:
         sigma (float): Стандартное отклонение награды для всех рычагов.
     """
 
-    def __init__(self, K: int, mus: list[float], sigma: float = 1.0):
+    def __init__(self, K: int, mus: list[float] = None, sigma: float = 1.0):
         """
         Инициализация многорукого бандита.
 
@@ -25,7 +25,9 @@ class KArmedBandit:
         Raises:
             ValueError: Если длина списка mus не совпадает с K.
         """
-        if len(mus) != K:
+        if mus is None:
+            mus = np.random.normal(0.0, 1.0, size=K).astype(np.float32)
+        elif len(mus) != K:
             raise ValueError(f"Длина mus ({len(mus)}) должна совпадать с K ({K}).")
         self.K: int = K
         self.mus: np.ndarray = np.array(mus, dtype=np.float32)
