@@ -1,11 +1,26 @@
+# Виртуальные окружения
 venv/
-mlflow/*
+
+# MLflow артефакты
+mlflow/
+
+# Jupyter Notebook файлы
 ipynb/
+
+# Конфигурационные файлы
 .env
+
+# Кэш инструментов разработки
 .mypy_cache/
 __pycache__/
-.vscode/
 .pytest_cache/
+
+# Настройки IDE
+.vscode/
+
+# Личные заметки и временные файлы
 notes.txt
 trash/
+
+# Скрытые файлы по шаблону
 **/hide_*
