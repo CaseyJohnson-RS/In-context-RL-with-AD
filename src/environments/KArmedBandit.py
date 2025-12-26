@@ -1,57 +1,95 @@
 import numpy as np
+from typing import Tuple
+from .Environment import Environment
 
 
-class KArmedBandit:
+class KArmedBandit(Environment):
     """
-    Модель многорукого бандита с K рычагами.
+    K-armed bandit environment.
 
-    Каждый рычаг (action) имеет свою среднюю награду (mu) и общую дисперсию (sigma).
-
-    Attributes:
-        K (int): Количество рычагов.
-        mus (np.ndarray): Средние значения награды для каждого рычага.
-        sigma (float): Стандартное отклонение награды для всех рычагов.
+    Each arm (action) has its own mean reward (mu) and a shared standard deviation (sigma).
+    The environment is stateless: each step depends only on the chosen action.
     """
 
-    def __init__(self, K: int, mus: list[float] = None, sigma: float = 1.0):
+    def __init__(self, k: int, sigma: float = 1.0):
         """
-        Инициализация многорукого бандита.
+        Initialize the k-armed bandit.
 
         Args:
-            K (int): Количество рычагов.
-            mus (list[float]): Список средних значений награды для каждого рычага.
-            sigma (float, optional): Стандартное отклонение награды. По умолчанию 1.0.
+            k: The number of arms (actions) available in the bandit.
+            sigma: The standard deviation of the reward distribution, shared across all arms.
+                  Defaults to 1.0.
+
+        Note:
+            The mean rewards for each arm (mus) are randomly sampled from N(0, 1) during reset().
+            They are not provided as an argument to __init__ to ensure proper encapsulation
+            and alignment with typical bandit problem formulations.
 
         Raises:
-            ValueError: Если длина списка mus не совпадает с K.
+            ValueError: Not applicable in this implementation (validation moved to reset logic).
         """
-        if mus is None:
-            mus = np.random.normal(0.0, 1.0, size=K).astype(np.float32)
-        elif len(mus) != K:
-            raise ValueError(f"Длина mus ({len(mus)}) должна совпадать с K ({K}).")
-        self.K: int = K
-        self.mus: np.ndarray = np.array(mus, dtype=np.float32)
+        self.k: int = k
         self.sigma: float = sigma
 
-    def step(self, action: int) -> float:
+        self.reset()
+
+    def reset(self) -> Tuple[None, dict]:
         """
-        Выполнение действия (выбор рычага) и получение случайной награды.
+        Reset the environment to a new initial state.
 
-        Награда для выбранного рычага генерируется по нормальному распределению
-        с средним значением mus[action] и стандартным отклонением sigma.
-
-        Args:
-            action (int): Индекс выбранного рычага (0 <= action < K).
+        This method samples new mean rewards for each arm from a standard normal distribution
+        N(0, 1), effectively creating a new instance of the k-armed bandit problem.
 
         Returns:
-            float: Случайная награда для выбранного рычага.
+            Tuple containing:
+                - observation: None (the bandit provides no observations)
+                - info: A dictionary with environment metadata:
+                    * "k": number of arms
+                    * "mus": array of mean rewards for each arm
+                    * "sigma": standard deviation of reward distribution
+
+        Note:
+            Since the k-armed bandit is stateless, reset primarily serves to initialize
+            the mean rewards for the arms.
+        """
+        self.mus = np.random.normal(0.0, 1.0, size=self.k).astype(np.float32)
+
+        info = {"k": self.k, "mus": self.mus, "sigma": self.sigma}
+        return (None, info)
+
+    def step(self, action: int) -> Tuple[None, float, bool, bool, dict]:
+        """
+        Execute one step in the environment by pulling a specific arm.
+
+        The reward is sampled from a normal distribution with parameters:
+        N(mu[action], sigma), where mu[action] is the mean reward for the selected arm.
+
+        Args:
+            action: The index of the arm to pull (integer in range [0, k-1]).
+
+        Returns:
+            Tuple containing:
+                - observation: None (the k-armed bandit provides no observational feedback)
+                - reward: The stochastic reward sampled from N(mu[action], sigma)
+                - terminated: False (k-armed bandit episodes run indefinitely)
+                - truncated: False (no built-in truncation mechanism)
+                - info: Empty dictionary (no additional information provided)
 
         Raises:
-            IndexError: Если action выходит за пределы допустимого диапазона.
+            IndexError: If the action index is outside the valid range [0, k-1].
+
+        Example:
+            >>> env = KArmedBandit(k=3)
+            >>> env.reset()
+            >>> reward = env.step(0)[1]  # Pull first arm and get reward
         """
-        if not 0 <= action < self.K:
+        if not 0 <= action < self.k:
             raise IndexError(
-                f"Выбранный action ({action}) выходит за допустимый диапазон 0-{self.K - 1}."
+                f"Action {action} is out of valid range [0, {self.k - 1}]."
             )
+
         reward = np.random.normal(self.mus[action], self.sigma)
-        return reward
+        return (None, reward, False, False, {})
+
+    def observation(self):
+        return None

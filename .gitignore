@@ -1,8 +1,11 @@
 venv/
 mlflow/*
 ipynb/
+.env
 .mypy_cache/
 __pycache__/
 .vscode/
 .pytest_cache/
 notes.txt
+trash/
+**/hide_*

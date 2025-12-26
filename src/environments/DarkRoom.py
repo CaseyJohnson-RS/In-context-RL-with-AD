@@ -1,101 +1,104 @@
 import numpy as np
 from typing import Tuple, Dict, Any
+from .Environment import Environment
 
 
-class DarkRoom:
-    """
-    Класс среды 'Dark Room' — 2D дискретная POMDP, где агент должен найти невидимую цель.
-    Агент наблюдает только свои координаты (x, y) и получает вознаграждение r=1 при достижении цели.
-    """
+class DarkRoom(Environment):
 
-    def __init__(self, size: int = 9, hard: bool = False, max_steps: int = 20):
-        """
-        :param size: Размер комнаты (size x size)
-        :param hard: Если True — используется сложный вариант с редким вознаграждением
-        :param max_steps: Максимальная длина эпизода
-        """
+    def __init__(self, size: int = 9, mode: str = 'easy', max_steps: int = 20):
+        if size < 1:
+            raise ValueError(f"Room size must be ≥ 1, got {size}")
+        if max_steps < 1:
+            raise ValueError(f"max_steps must be ≥ 1, got {max_steps}")
+
         self.size = size
-        self.hard = hard
+        self.mode = mode
         self.max_steps = max_steps
-
+        self.visited_positions = set()  # Track visited positions
         self.reset()
 
-    # --- Интерфейс среды ---
-    def reset(self) -> np.ndarray:
-        """Сбрасывает среду и возвращает начальное наблюдение (координаты агента)."""
-        self.agent_pos = np.array([self.size // 2, self.size // 2], dtype=np.int32)
+    def reset(self) -> Tuple[Any, Dict[str, Any]]:
+        self.agent_pos = (self.size // 2, self.size // 2)
         self.goal_pos = np.random.randint(0, self.size, size=2, dtype=np.int32)
         self.steps = 0
         self.goal_found = False
-        return self._get_obs()
+        self.visited_positions.clear()  # Reset visited positions
+        self.visited_positions.add(self.agent_pos)  # Add starting position
+        
+        info = {
+            "initial_position": self.agent_pos,
+            "goal_position": tuple(self.goal_pos),
+            "mode": self.mode,
+            "max_steps": self.max_steps,
+            "visited_count": 1
+        }
+        return (self._get_obs(), info)
 
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, Dict[str, Any]]:
-        """
-        Выполняет одно действие агента.
-        :param action: 0=вверх, 1=вниз, 2=влево, 3=вправо, 4=ничего не делать
-        :return: (наблюдение, вознаграждение, done, информация)
-        """
+    def step(self, action: int) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
         if not (0 <= action <= 4):
-            raise ValueError("Действие должно быть числом от 0 до 4")
+            raise ValueError("Action must be an integer from 0 to 4 (inclusive)")
 
-        # Двигаем агента
-        if action == 0:  # вверх
-            self.agent_pos[0] = max(0, self.agent_pos[0] - 1)
-        elif action == 1:  # вниз
-            self.agent_pos[0] = min(self.size - 1, self.agent_pos[0] + 1)
-        elif action == 2:  # влево
-            self.agent_pos[1] = max(0, self.agent_pos[1] - 1)
-        elif action == 3:  # вправо
-            self.agent_pos[1] = min(self.size - 1, self.agent_pos[1] + 1)
-        # действие 4 — no-op (ничего не делает)
+        # Define action effects: (dx, dy) - 0:stay, 1:up, 2:down, 3:left, 4:right
+        actions = [(0, 0), (0, -1), (0, 1), (-1, 0), (1, 0)]
+        
+        # Apply action and clamp to grid boundaries
+        self.agent_pos = (
+            self.__clamp(self.agent_pos[0] + actions[action][0], 0, self.size - 1),
+            self.__clamp(self.agent_pos[1] + actions[action][1], 0, self.size - 1),
+        )
 
         self.steps += 1
-        done = False
+        terminated = False
+        truncated = False
         reward = 0.0
 
-        # Проверяем, достиг ли агент цели
+        # Goal reward
         if np.array_equal(self.agent_pos, self.goal_pos):
-            if not self.hard or not self.goal_found:
-                reward = 1.0
+            if not self.mode == 'hard' or not self.goal_found:
+                reward += 1.0
             self.goal_found = True
-            if self.hard:
-                done = True  # В сложной версии эпизод завершается после нахождения цели
+            if self.mode == 'hard':
+                terminated = True
 
-        # Проверяем лимит по шагам
+        current_pos_tuple = tuple(self.agent_pos)
+        
+        if self.mode == 'easy':
+            # EXPLORATION REWARD: New position bonus vs revisit penalty
+            if current_pos_tuple not in self.visited_positions:
+                # NEW POSITION: exploration bonus
+                reward += 0.05
+                self.visited_positions.add(current_pos_tuple)
+            else:
+                # REVISITED POSITION: penalty
+                reward -= 0.05
+
+        # Clamp total reward
+        reward = np.clip(reward, -0.1, 1.0)
+
+        # Check step limit
         if self.steps >= self.max_steps:
-            done = True
+            truncated = True
 
-        return self._get_obs(), reward, done, {"goal": self.goal_pos.copy()}
+        info = {
+            "step": self.steps,
+            "agent_position": self.agent_pos,
+            "goal_position": tuple(self.goal_pos),
+            "goal_found": self.goal_found,
+            "reward": reward,
+            "is_new_position": current_pos_tuple not in self.visited_positions,
+            "visited_count": len(self.visited_positions),
+        }
 
-    def _get_obs(self) -> np.ndarray:
-        """Возвращает наблюдение — только текущие координаты агента."""
-        return self.agent_pos.copy()
+        return self._get_obs(), reward, terminated, truncated, info
 
-    # --- Вспомогательные методы ---
-    def render(self) -> None:
-        """Простая текстовая визуализация комнаты."""
-        grid = np.full((self.size, self.size), '.', dtype=str)
-        x, y = self.agent_pos
-        gx, gy = self.goal_pos
-        grid[gx, gy] = 'G'  # цель
-        grid[x, y] = 'A'    # агент
-        print("\n".join(" ".join(row) for row in grid))
-        print(f"Шаг: {self.steps} | Позиция агента: {self.agent_pos.tolist()} | Цель: {self.goal_pos.tolist()}")
+    def observation(self):
+        return self._get_obs()
 
+    @staticmethod
+    def __clamp(x, minimum, maximum):
+        return max(minimum, min(x, maximum))
 
-if __name__ == "__main__":
-    env = DarkRoom(size=9, hard=False)
+    def _get_obs(self) -> Tuple[int, int]:
+        return self.agent_pos
 
-    obs = env.reset()
-    print("Начальное наблюдение:", obs)
-
-    for t in range(20):
-        action = np.random.randint(0, 5)  # случайное действие
-        obs, reward, done, info = env.step(action)
-        print(f"Шаг {t+1}: действие={action}, наблюдение={obs}, награда={reward}")
-        env.render()
-        if reward > 0:
-            print("Цель достигнута!")
-        if done:
-            print("Эпизод завершён.")
-            break
+__all__ = ["DarkRoom"]

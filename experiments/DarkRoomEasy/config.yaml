@@ -1,0 +1,41 @@
+# General configs
+seed: 42
+autoconfirm: true
+track_experiment: true
+experiment_name: "Dark Room Easy"  
+run_name: "DQN"
+
+# Environment configs
+
+env: DarkRoom
+env_args:
+  size: 9
+  mode: easy
+  max_steps: 20
+
+# Agent configs
+
+agent: DQNAgent
+agent_args:
+  env_size: 9
+  lr: 0.0005
+  gamma: 0.3
+  buffer_size: 10000
+  batch_size: 128
+  epsilon_start: 1.0
+  epsilon_end: 0
+  epsilon_decay: 0.98
+  target_update: 100
+  hidden_size: 16
+
+# Train configs
+
+train_episodes: 500
+
+# Test configs
+
+test_episodes: 200
+
+# Logging configs
+
+log_episodes_interval: 10

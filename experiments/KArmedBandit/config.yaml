@@ -1,0 +1,27 @@
+# General configs
+seed: 42
+autoconfirm: true
+track_experiment: true
+experiment_name: "K-Armed Bandit"  
+run_name: "Thompson Sampling"
+
+# Environment configs
+
+env: KArmedBandit
+env_args:
+  k: 10
+  sigma: 1.0
+
+# Agent configs
+
+agent: ThompsonSamplingAgent
+agent_args:
+  k: 10
+
+# Train configs
+
+train_steps: 1000
+
+# Logging configs
+
+log_interval: 20
