@@ -30,7 +30,7 @@ def initialize(CONFIG: dict) -> Tuple[MLFlowManager, Callable[[], RLAgent], Call
     agent.reset()
     agent.train(env_constructor=env_constructor, steps=100)
 
-    console.print("[green]✓ Agent and Environment are checked[/green]")
+    console.print("[green]✓[/green] Agent and Environment are checked")
 
     return mlflow, agent_constructor, env_constructor
 
