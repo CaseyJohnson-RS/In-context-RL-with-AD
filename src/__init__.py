@@ -4,7 +4,7 @@ import random
 from rich.console import Console
 from rich.text import Text
 import torch
-from typing import Optional, Any, Dict, List, Union
+from typing import Any, Dict, List, Union
 import yaml
 
 
@@ -27,7 +27,7 @@ def set_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)  # Для всех доступных GPU
 
 
-def load_yaml(filepath: str | Path) -> Optional[dict]:
+def load_yaml(filepath: str | Path) -> Dict:
     """
     Loads a YAML file and returns its contents as a dictionary.
 
@@ -55,7 +55,7 @@ def load_yaml(filepath: str | Path) -> Optional[dict]:
 
 def pretty_print_yaml(
     data: Union[Dict, List, str, Path],
-    console: Console = None,
+    console: Console | None = None,
     indent: int = 0,
     max_depth: int = 10,
     current_depth: int = 0

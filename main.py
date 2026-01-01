@@ -1,7 +1,7 @@
 import importlib.util
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Tuple
 
 from questionary import questionary
 from rich.console import Console
@@ -10,7 +10,7 @@ console = Console()
 
 # --- CONF LOAD --- 
 
-def load_environ() -> str:
+def load_environ() -> None:
     from dotenv import load_dotenv
     console.print("→ Load environment variables")
 
@@ -22,6 +22,8 @@ def pasre_args() -> Dict:
     import argparse
     console.print("→ Check general configs")
 
+    flag_args = ["autoconfirm", "track"]
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--experiment', '-e', type=str)
@@ -31,15 +33,25 @@ def pasre_args() -> Dict:
     parser.add_argument('--run_name', '-r', type=str)
 
     args = parser.parse_args()
-    return {k: v for k, v in vars(args).items() if v is not None}
 
-def load_experiments() -> Dict:
+    out_args = {}
+    for k, v in vars(args).items():
+        if v is not None:
+            if k in flag_args:
+                if v:
+                    out_args[k] = v
+            else:
+                out_args[k] = v
+
+    return out_args
+
+def load_experiments() -> List[Tuple[Dict, Path]]:
     from src import load_yaml
     console.print("→ Load experiments' configs")
 
     exp_dirs = [entry for entry in  Path('experiments').iterdir() if entry.is_dir()]
 
-    experiments = []
+    experiments: List[Tuple[Dict, Path]] = []
     for exp_dir in exp_dirs:
         try:
             path = exp_dir / 'config.yaml'
@@ -53,7 +65,7 @@ def load_experiments() -> Dict:
     
 # --- INIT ---
 
-def choose_experiment(GENERAL_CONFIG: Dict, EXP_CONFIGS: Dict) -> int:
+def choose_experiment(GENERAL_CONFIG: Dict, EXP_CONFIGS: List[Tuple[Dict, Path]]) -> int:
     names = [rec[0]['experiment_name'] for rec in EXP_CONFIGS]
     question = questionary.select("Choose the experiment", names)
     name = GENERAL_CONFIG.get("experiment", False)
@@ -102,7 +114,7 @@ console.rule('[magenta]Load configs and environment variables[/magenta]')
 load_environ()
 GENERAL_CONFIG = pasre_args()
 EXP_CONFIGS = load_experiments()
-
+print(GENERAL_CONFIG)
 console.rule('[magenta]Initializing[/magenta]')
 
 exp_index = choose_experiment(GENERAL_CONFIG, EXP_CONFIGS)
@@ -116,7 +128,10 @@ module_name = 'experiment'
 spec = importlib.util.spec_from_file_location(module_name, file_path)
 if spec is None:
     console.print(f'[red]X[/red] Cannot find experiment script: {file_path}')
-else:
-    my_module = importlib.util.module_from_spec(spec)
+    raise FileNotFoundError(f'Cannot find experiment script: {file_path}')
+
+my_module = importlib.util.module_from_spec(spec)
+
+if spec.loader is not None:
     spec.loader.exec_module(my_module)
     my_module.run(CONFIG)

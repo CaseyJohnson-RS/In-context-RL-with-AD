@@ -8,7 +8,7 @@ import random
 from typing import (Any, Callable, Tuple, Dict, List)
 
 from src.environments import DarkRoom
-from .RLAgent import RLAgent  # type: ignore[import]
+from .RLAgent import RLAgent
 
 
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state', 'done'])
@@ -193,8 +193,8 @@ class DQNAgent(RLAgent):
             self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
         
         metrics = {
-            'avg_reward': np.mean(rewards),
-            'avg_length': np.mean(lengths),
+            'train_avg_reward': np.mean(rewards),
+            'train_avg_length': np.mean(lengths),
             'train_success_rate': np.mean(successes),
             'epsilon': self.epsilon,
         }
@@ -239,13 +239,15 @@ class DQNAgent(RLAgent):
         self.epsilon = epsilon_backup
         
         metrics = {
-            'avg_reward': np.mean(rewards),
-            'avg_length': np.mean(lengths),
-            'test_success_rate': np.mean(successes),
-            'avg_explored_norm': np.mean(explored_norm),
+            'test_avg_reward': np.mean(rewards),
+            'test_avg_length': np.mean(lengths),
+            'test_test_success_rate': np.mean(successes),
+            'test_avg_exp_norm': np.mean(explored_norm),
         }
         
-        info = metrics.copy()
+        info = {
+            'AEN': np.mean(explored_norm),
+        }
         return metrics, info
     
     def trace(self, env_constructor: Callable[[], DarkRoom], trace_len: int) -> List[Tuple[Tuple[int, int], int, float]]:
