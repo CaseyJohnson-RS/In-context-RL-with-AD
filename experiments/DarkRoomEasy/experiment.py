@@ -2,8 +2,8 @@ from typing import Callable, Tuple
 from rich.console import Console
 from src import set_seed
 from src.workflow import MLFlowManager
-from src.models import RLAgent, create_agent
-from src.environments import Environment, create_environment
+from src.models.agents import DQNAgent
+from src.environments import DarkRoom
 from tqdm import tqdm
 
 console = Console()
@@ -11,7 +11,7 @@ console = Console()
 
 # ---------------------- INIT ---------------------- #
 
-def initialize(CONFIG: dict) -> Tuple[MLFlowManager, Callable[[], RLAgent], Callable[[], Environment]]:
+def initialize(CONFIG: dict) -> Tuple[MLFlowManager, Callable[[], DQNAgent], Callable[[], DarkRoom]]:
 
     mlflow = MLFlowManager(
         experiment_name=CONFIG['experiment_name'],
@@ -19,18 +19,18 @@ def initialize(CONFIG: dict) -> Tuple[MLFlowManager, Callable[[], RLAgent], Call
     )
     mlflow.connect()
 
-    def agent_constructor() -> RLAgent:
-        return create_agent(CONFIG['agent'], CONFIG['agent_args'])
+    def agent_constructor() -> DQNAgent:
+        return DQNAgent(**CONFIG['agent_args'])
     
-    def env_constructor() -> Environment:
-        return create_environment(CONFIG['env'], CONFIG['env_args'])
+    def env_constructor() -> DarkRoom:
+        return DarkRoom(**CONFIG['env_args'])
 
     agent = agent_constructor()
     agent.reset()
     agent.train(env_constructor=env_constructor, episodes=1)
     agent.test(env_constructor=env_constructor, episodes=1)
 
-    console.print("[green]✓[/green] Agent and Environment are checked")
+    console.print("[green]✓[/green] Agent and DarkRoom are checked")
 
     return mlflow, agent_constructor, env_constructor
 
@@ -38,8 +38,8 @@ def initialize(CONFIG: dict) -> Tuple[MLFlowManager, Callable[[], RLAgent], Call
 
 def train_agent(
         mlflow: MLFlowManager,
-        agent_constructor: Callable[[], RLAgent],
-        env_constructor: Callable[[], Environment],
+        agent_constructor: Callable[[], DQNAgent],
+        env_constructor: Callable[[], DarkRoom],
         CONFIG: dict
     ):
 

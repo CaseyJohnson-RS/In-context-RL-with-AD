@@ -3,7 +3,7 @@ import math
 from typing import Any, Callable, Dict, List, Tuple
 
 
-from src.environments import Environment
+from src.environments import KArmedBandit
 from .RLAgent import RLAgent
 
 
@@ -14,6 +14,9 @@ class ThompsonSamplingAgent(RLAgent):
     over rewards and selects the arm with the highest random sample from this
     distribution. Assumes normally distributed rewards with known observation variance.
     """
+
+    trace_format = ("action", "reward")
+    trace_zeroed = (0, 0.0)
 
     def __init__(
         self,
@@ -30,9 +33,6 @@ class ThompsonSamplingAgent(RLAgent):
             prior_var: prior variance of mean reward (default: 1.0)
             obs_var: known observation variance (same for all arms, default: 1.0)
         """
-        self.trace_format = ("action", "reward")
-        self.trace_zeroed = (0, 0.0)
-
         self.k: int = k
         self.prior_mean: float = prior_mean
         self.prior_var: float = prior_var
@@ -91,7 +91,7 @@ class ThompsonSamplingAgent(RLAgent):
         self.sum_rewards[action] += float(reward)
     
     def _run(
-        self, environment: Environment, steps: int, update_agent: bool
+        self, environment: KArmedBandit, steps: int, update_agent: bool
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Runs the agent in the environment for a specified number of steps.
 
@@ -161,7 +161,7 @@ class ThompsonSamplingAgent(RLAgent):
     # ========== API ==========
 
     def train(
-        self, env_constructor: Callable[[], Environment], steps: int
+        self, env_constructor: Callable[[], KArmedBandit], episodes: int
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Trains the agent in the given environment.
 
@@ -174,12 +174,12 @@ class ThompsonSamplingAgent(RLAgent):
             info: detailed information about the process
         """
         metrics, info = self._run(
-            environment=env_constructor(), steps=steps, update_agent=True
+            environment=env_constructor(), steps=episodes, update_agent=True
         )
         return metrics, {"Reward": info["Reward"]}
 
     def test(
-        self, env_constructor: Callable[[], Environment], steps: int
+        self, env_constructor: Callable[[], KArmedBandit], episodes: int
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Tests the agent in the environment (without updating parameters).
 
@@ -192,12 +192,12 @@ class ThompsonSamplingAgent(RLAgent):
             info: detailed information about the process
         """
         metrics, info = self._run(
-            environment=env_constructor(), steps=steps, update_agent=False
+            environment=env_constructor(), steps=episodes, update_agent=False
         )
         return metrics, {"Reward": info["Reward"]}
 
     def trace(
-        self, env_constructor: Callable[[], Environment], trace_len: int
+        self, env_constructor: Callable[[], KArmedBandit], trace_len: int
     ) -> List[Tuple]:
         """Collects a sequence of actions and rewards.
 
@@ -219,7 +219,7 @@ class ThompsonSamplingAgent(RLAgent):
 
         return trace
 
-    def reset(self):
+    def reset(self) -> None:
         """Resets agent statistics to initial state.
 
         Resets:

@@ -1,1 +1,1 @@
-from .agents import create_agent, RLAgent  # noqa: F401
+from .agents import RLAgent  # noqa: F401

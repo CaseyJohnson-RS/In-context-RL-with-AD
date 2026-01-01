@@ -1,9 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Callable, List, Tuple, Dict, Optional
 
-from src.environments import Environment
-
-
 class RLAgent(ABC):
     """Abstract base class for reinforcement learning agents.
 
@@ -16,7 +13,7 @@ class RLAgent(ABC):
     trace_zeroed: Optional[Tuple[Any, ...]] = None
 
     @abstractmethod
-    def train(self, env_constructor: Callable[[], Environment], episodes: int) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def train(self, env_constructor: Callable, episodes: int) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Train the agent in a given environment for a specified number of steps.
 
         Args:
@@ -33,7 +30,7 @@ class RLAgent(ABC):
         pass
 
     @abstractmethod
-    def test(self, env_constructor: Callable[[], Environment], episodes: int) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def test(self, env_constructor: Callable, episodes: int) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Test the agent in a given environment (typically without parameter updates).
 
         Args:
@@ -50,7 +47,7 @@ class RLAgent(ABC):
         pass
 
     @abstractmethod
-    def trace(self, env_constructor: Callable[[], Environment], trace_len: int) -> List[Tuple]:
+    def trace(self, env_constructor: Callable, trace_len: int) -> List[Tuple]:
         """Generate a trace of agent-environment interactions.
 
         Args:
