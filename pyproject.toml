@@ -1,7 +1,7 @@
 [project]
 name = "in-context-rl-with-ad"
 version = "0.1.0"
-description = "Add your description here"
+description = "The project is a sandbox for conducting experiments with distillation of the learning algorithm."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
