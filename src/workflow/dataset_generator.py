@@ -1,4 +1,4 @@
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Any
 from src.environments import Environment 
 from src.models.agents import RLAgent
 from .SequenceDataset import SequenceDataset
@@ -9,9 +9,9 @@ def __generate_traces(
         env_constructor: Callable[[], Environment],
         trace_count: int,
         trace_len: int
-    ) -> List[List[Tuple[int, float]]]:
+    ) -> List[List[Tuple]]:
 
-    traces: List[List[Tuple[int, float]]] = []
+    traces: List[List[Tuple]] = []
 
     for _ in range(trace_count):
 
@@ -23,12 +23,25 @@ def __generate_traces(
     return traces
 
 
-def __traces_to_sequences(traces: List, agent: RLAgent,  seq_len: int, seq_per_trace: int) -> List[Tuple]:
+def __traces_to_sequences(traces: List[List[Tuple]], agent: RLAgent,  seq_len: int, seq_per_trace: int) -> Tuple[List[List[List]], List[Any]]:
 
-    sequences: List[Tuple] = []
-    action_idx = agent.get_trace_format().index("action")
-    trace_step_len = len(agent.get_trace_format())
-    get_trace_zeroed = agent.get_trace_zeroed()
+    sequences: List[List[List]] = []
+    targets: List[Any] = []
+
+    trace_format = agent.get_trace_format()
+    trace_zeroed = agent.get_trace_zeroed()
+    
+    if trace_format is None:
+        raise ValueError(f"Agent '{agent.__class__.__name__}' has None trace format!")
+    
+    if trace_zeroed is None:
+        raise ValueError(f"Agent '{agent.__class__.__name__}' has None zeroed trace!")
+    
+    if "action" not in trace_format:
+        raise ValueError(f"Agent's ({agent.__class__.__name__}) trace format hasn't 'action' in trace!")
+
+    action_idx = trace_format.index("action")
+    trace_step_len = len(trace_format)
 
     for trace in traces:
         trace_len = len(trace)
@@ -48,12 +61,11 @@ def __traces_to_sequences(traces: List, agent: RLAgent,  seq_len: int, seq_per_t
             window = trace[start:t]
 
             target = trace[t][action_idx]
-
-            sequence = ([[] for _ in range(trace_step_len)] + [target])
+            sequence: List[List] = [[] for _ in range(trace_step_len)]
 
             for _ in range(seq_len - t + start):
                 for i in range(trace_step_len):
-                    sequence[i].append(get_trace_zeroed[i])
+                    sequence[i].append(trace_zeroed[i])
 
             for trace_step in window:
                 for i in range(trace_step_len):
@@ -63,8 +75,9 @@ def __traces_to_sequences(traces: List, agent: RLAgent,  seq_len: int, seq_per_t
                 sequence[i].append(trace[t][i])
             
             sequences.append(sequence)
+            targets.append(target)
 
-    return sequences
+    return sequences, targets
 
 
 def create_dataset(
@@ -83,14 +96,14 @@ def create_dataset(
         trace_len=trace_len
     )
 
-    sequences = __traces_to_sequences(
+    sequences, targets = __traces_to_sequences(
         traces=traces,
         agent=agent_constructor(),
         seq_len=seq_len,
         seq_per_trace=seq_per_trace
     )
 
-    dataset = SequenceDataset(sequences=sequences)
+    dataset = SequenceDataset(sequences=sequences, targets=targets)
 
     return dataset
 
