@@ -1,31 +1,27 @@
 import torch
 import torch.nn as nn
+from torch import Tensor
+
 from src.layers import PositionalEncoding
 from .ARTransformerBase import ARTransformerBase
- 
+
 
 class ARConTransformer(ARTransformerBase):
     """
-    Трансформер с чередующимися токенами действия и награды.
-    Action и Reward кодируются в отдельные векторы, затем конкатенируются
-    для формирования удвоенной последовательности: [a_1, r_1, a_2, r_2, ...].
-
-    Параметры
-    ----------
-    n_actions : int
-        Количество возможных действий (рукавов бандита).
-    d_model : int, default=64
-        Размер эмбеддингов и скрытых состояний трансформера.
-    nhead : int, default=4
-        Количество голов в Multi-Head Attention.
-    num_layers : int, default=4
-        Количество слоёв TransformerEncoder.
-    dim_feedforward : int, default=2048
-        Размер скрытого слоя в feedforward-блоке трансформера.
-    max_len : int, default=200
-        Максимальная длина последовательности действий (не удвоенная).
+    Autoregressive transformer with interleaved action-reward tokens.
+    Creates doubled sequence [a1, r1, a2, r2, ..., aL, rL] for explicit 
+    action-reward pairing in attention.
+    
+    Architecture:
+        actions -> Embedding(n_actions→d_model)
+        rewards -> Linear(1→d_model)
+        Interleave [action_emb, reward_emb] -> (B, 2L, d_model)
+        -> PosEnc(2*max_len) -> Causal Transformer -> head(-2)
+    
+    Args:
+        Same as ARTransformerBase; max_len is action steps (sequence 2*max_len).
     """
-
+    
     def __init__(
         self,
         n_actions: int,
@@ -33,40 +29,63 @@ class ARConTransformer(ARTransformerBase):
         nhead: int = 4,
         num_layers: int = 4,
         dim_feedforward: int = 2048,
-        max_len: int = 200
-    ):
-        super().__init__(n_actions, d_model, nhead, num_layers, dim_feedforward, max_len)
+        max_len: int = 200,
+        dropout: float = 0.1,
+    ) -> None:
+        # Double max_len for interleaved sequence
+        super().__init__(
+            n_actions, d_model, nhead, num_layers, 
+            dim_feedforward, max_len * 2, dropout
+        )
+        
+        self.action_emb = nn.Embedding(n_actions, d_model)
+        self.reward_emb = nn.Linear(1, d_model)
 
-        # Эмбеддинги
-        self.action_emb = nn.Embedding(n_actions, d_model)  # действия -> вектор d_model
-        self.reward_emb = nn.Linear(1, d_model)             # награда -> вектор d_model
-
-        # Positional encoding для удвоенной последовательности
-        # (чередуем action и reward)
-        # длина max_len * 2
+        # Positional encoding
         self.pos_enc = PositionalEncoding(d_model, max_len=max_len * 2)
-
-    def sequence_encode(self, actions, rewards):
-
+    
+    def sequence_encode(self, actions: Tensor, rewards: Tensor) -> Tensor:
+        """
+        Interleave action/reward embeddings into doubled sequence.
+        
+        Args:
+            actions: (B, L) or (L,) action indices [0, n_actions).
+            rewards: (B, L) or (L,) reward scalars.
+            
+        Returns:
+            Interleaved embeddings (B, 2L, d_model): [a1,r1,a2,r2,...].
+        """
+        # Batch normalization
+        if actions.dim() == 1:
+            actions = actions.unsqueeze(0)
+            rewards = rewards.unsqueeze(0)
+        
         B, L = actions.shape
-        D = self.d_model
-
-        # Эмбеддинги действий и наград
-        a_e = self.action_emb(actions)      # (B, L, D)
-        r_e = self.reward_emb(rewards)      # (B, L, D)
-
-        # Конкатенация action-reward в чередующуюся последовательность
-        # (B, L, 2, D) -> (B, 2*L, D)
-        # Порядок: [a_1, r_1, a_2, r_2, ..., a_L, r_L]
-        x = torch.stack([a_e, r_e], dim=2)  # (B, L, 2, D)
-        x = x.reshape(B, L * 2, D)          # (B, 2L, D)
-
-        x = self.pos_enc(x)  # Позиционная кодировка
-
+        
+        # Embeddings
+        a_emb = self.action_emb(actions.long())      # (B, L, d_model)
+        r_emb = self.reward_emb(rewards.unsqueeze(-1))  # (B, L, 1) -> (B, L, d_model)
+        
+        # Interleave: [a1, r1, a2, r2, ...]
+        interleaved = torch.stack([a_emb, r_emb], dim=2)  # (B, L, 2, d_model)
+        x = interleaved.reshape(B, L * 2, self.d_model)   # (B, 2L, d_model)
+        
+        # Positional encoding (handles 2*max_len)
+        x = self.pos_enc(x)
+        
         return x
     
-    def decode_action(self, x):
-        # Пропускаем предпоследний токен действия в последовательности
-        # [a_1, r_1, a_2, r_2, ..., a_L, r_L]
-        # через линейный слой
-        return self.head(x[:, -2, :])
+    def decode_action(self, x: Tensor) -> Tensor:
+        """
+        Predict next action from last action token (position -2).
+        
+        Args:
+            x: (B, 2L, d_model) transformer output.
+            
+        Returns:
+            Logits (B, n_actions) from final action embedding.
+        """
+        # Sequence: [... a_L-1, r_L-1, a_L, r_L]
+        # Predict from a_L (index -2)
+        last_action_emb = x[:, -2]
+        return self.action_head(last_action_emb)

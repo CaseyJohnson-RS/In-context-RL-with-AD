@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from abc import ABC, abstractmethod
+from typing import Optional
 
 
 Tensor = torch.Tensor
@@ -8,26 +9,18 @@ Tensor = torch.Tensor
 
 class ARTransformerBase(nn.Module, ABC):
     """
-    Базовый класс трансформера для последовательностей действий.
-    Используется для предсказания следующего действия по истории
-    действий и наград (actions, rewards).
-
-    Параметры
-    ----------
-    n_actions : int
-        Количество возможных действий (рук бандита).
-    d_model : int, default=64
-        Размер эмбеддингов и скрытого состояния трансформера.
-    nhead : int, default=4
-        Количество голов в Multi-Head Attention.
-    num_layers : int, default=4
-        Количество слоёв TransformerEncoder.
-    dim_feedforward : int, default=2048
-        Размер скрытого слоя в feedforward-блоке трансформера.
-    max_len : int, default=200
-        Максимальная длина последовательности.
+    Base autoregressive transformer for action sequence prediction.
+    Predicts next action from action/reward history using causal masking.
+    
+    Args:
+        n_actions: Number of possible actions (e.g., bandit arms).
+        d_model: Embedding and transformer hidden dimension (default: 64).
+        nhead: Number of attention heads (default: 4).
+        num_layers: Number of transformer encoder layers (default: 4).
+        dim_feedforward: FFN hidden dimension (default: 2048).
+        max_len: Maximum sequence length (default: 200).
     """
-
+    
     def __init__(
         self,
         n_actions: int,
@@ -36,67 +29,124 @@ class ARTransformerBase(nn.Module, ABC):
         num_layers: int = 4,
         dim_feedforward: int = 2048,
         max_len: int = 200,
-    ):
+        dropout: float = 0.1,
+    ) -> None:
         super().__init__()
-
-        # Всё запоминаем
+        
+        # Config (frozen for reproducibility)
         self.n_actions = n_actions
         self.d_model = d_model
         self.nhead = nhead
         self.num_layers = num_layers
         self.dim_feedforward = dim_feedforward
         self.max_len = max_len
-
-        # Transformer Encoder
+        self.dropout = dropout
+        
+        # Positional encoding
+        self.pos_encoding = nn.Parameter(torch.zeros(1, max_len, d_model))
+        
+        # Transformer encoder with dropout
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=nhead,
             dim_feedforward=dim_feedforward,
             activation="gelu",
             batch_first=True,
+            dropout=dropout,
+            norm_first=True,  # Pre-norm for stability
         )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
-        # LayerNorm и линейная проекция на действия
-        self.ln = nn.LayerNorm(d_model)
-        self.head = nn.Linear(d_model, n_actions)
-
+        self.transformer = nn.TransformerEncoder(
+            encoder_layer, num_layers=num_layers
+        )
+        
+        # Output projection
+        self.ln_final = nn.LayerNorm(d_model)
+        self.action_head = nn.Linear(d_model, n_actions)
+        
+        # Apply weight init
+        self.apply(self._init_weights)
+    
+    def _init_weights(self, module: nn.Module) -> None:
+        """Xavier init for stability."""
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+    
     @abstractmethod
     def sequence_encode(self, actions: Tensor, rewards: Tensor) -> Tensor:
         """
-        Функция для кодировки тензоров actions и rewards в 
-        последовательность эмбеддингов.
+        Encode action/reward tensors into transformer embeddings.
+        
+        Args:
+            actions: (B, L) action indices.
+            rewards: (B, L) reward values.
+            
+        Returns:
+            Embeddings (B, L, d_model).
         """
         pass
-
+    
     @abstractmethod
     def decode_action(self, x: Tensor) -> Tensor:
         """
-        Функция для определения действия. x - выход LayerNorm слоя.
+        Decode transformer output to action logits.
+        
+        Args:
+            x: (B, L, d_model) final layer norm output.
+            
+        Returns:
+            Action logits (B, L, n_actions).
         """
         pass
-
-    def forward(self, actions: torch.Tensor, rewards: torch.Tensor) -> torch.Tensor:
-
-        # Кодируем последовательность
-        x = self.sequence_encode(actions, rewards)
-
-        seq_len = x.size(1)
-
-        # Маска размера (seq_len, seq_len)
-        causal_mask = torch.ones(
-            (seq_len, seq_len), dtype=torch.bool, device=x.device
-        ).triu_(1)
-
-        # Для TransformerEncoder маска должна быть float и иметь значения:
-        # 0.0 = разрешено смотреть
-        # -inf = запрещено смотреть
-        attn_mask = torch.zeros((seq_len, seq_len), device=x.device)
-        attn_mask.masked_fill_(causal_mask, float("-inf"))
-
-        # Проход через трансформер с маской
-        x = self.transformer(x, mask=attn_mask)  # (B, L, D)
-        x = self.ln(x)
-
-        # Выбираем действие
-        return self.decode_action(x)
+    
+    def _generate_causal_mask(
+        self, seq_len: int, device: torch.device
+    ) -> Optional[Tensor]:
+        """Generate causal attention mask."""
+        if seq_len == 1:
+            return None
+        mask = torch.full(
+            (seq_len, seq_len), float("-inf"), device=device, dtype=torch.float
+        )
+        mask.triu_(1)  # Upper triangle masked
+        return mask
+    
+    def forward(
+        self, actions: Tensor, rewards: Tensor, padding_mask: Optional[Tensor] = None
+    ) -> Tensor:
+        """
+        Forward pass with causal masking.
+        
+        Args:
+            actions: (B, L) or (L,) action sequence.
+            rewards: (B, L) or (L,) reward sequence.
+            padding_mask: (B, L) optional padding mask.
+            
+        Returns:
+            Action logits (B, L, n_actions).
+        """
+        # Encode sequence
+        x = self.sequence_encode(actions, rewards)  # (B, L, D)
+        
+        batch_size, seq_len = x.shape[:2]
+        
+        # Add positional encoding
+        x = x + self.pos_encoding[:, :seq_len]
+        
+        # Causal mask
+        causal_mask = self._generate_causal_mask(seq_len, x.device)
+        
+        # Transformer forward
+        x = self.transformer(
+            x, 
+            mask=causal_mask,
+            src_key_padding_mask=padding_mask
+        )  # (B, L, D)
+        
+        x = self.ln_final(x)
+        
+        # Decode to actions
+        logits = self.decode_action(x)  # (B, L, n_actions)
+        
+        return logits
