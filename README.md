@@ -19,62 +19,83 @@ Installing the CUDA toolchain is optional, and I'll leave that for you to explor
 
 If you only have one Python interpreter installed, you can create a virtual environment with the command:
 ```bash
-python -m venv <your_env_name>
-```
+# In-Context Reinforcement Learning with Algorithm Distillation
 
-If you have multiple Python versions, you can select the one you need with the command:
-```bash
-py -3.10 -m venv <your_env_name>
-```
+A sandbox for experiments on algorithm distillation in reinforcement learning. The codebase provides small environments, experiment configs, and training/evaluation scripts to study how learning algorithms can be distilled into model behavior.
 
-*Make sure you create the environment in the correct directory.*
+Features
+- Experiment runner: pick an experiment config and execute its `experiment.py` via `main.py`.
+- Multiple example environments under `experiments/` (DarkRoom, KArmedBandit, etc.).
+- Simple tracking integration using MLflow (optional).
 
-###### 2. Activate the environment
+Requirements
+- Python 3.10 or newer
+- See `pyproject.toml` for the primary runtime dependencies (torch, mlflow, numpy, pyyaml, questionary, rich, tqdm).
 
-Windows
-```cmd
-<your_env_name>\Scripts\activate.bat
-```
-
-Linux
-```bash
-source <your_env_name>/bin/activate
-```
-
-###### 3. Install libraries
-
-I'd like to point out that the virtual environment in the total size is about 6 GB. This isn't a warning, just a fact. Be prepared.
+Quickstart
+1. Create and activate a virtual environment:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+2. Install dependencies. If you have a `requirements.txt`, use it; otherwise install from `pyproject.toml`'s dependencies:
+
+```bash
+# If you have requirements.txt
 pip install -r requirements.txt
+
+# Or install the main runtime deps directly
+pip install dotenv mlflow numpy pyyaml questionary rich torch tqdm
 ```
 
-###### 4. Starting the MLFlow server
-
-Create a directory in advance to store the MLFlow server data.
+3. Run the interactive experiment chooser:
 
 ```bash
-<mlflow_dir_path>
-├── data_local/
-└── artifacts/
+python main.py
 ```
 
-Next, run the command.
+You can pass CLI flags to `main.py`:
+
+- `--experiment` / `-e` : experiment name (matches `experiment_name` in an `experiments/*/config.yaml`)
+- `--seed` / `-s` : random seed
+- `--autoconfirm` / `-a` : skip interactive confirmation
+- `--track` / `-t` : enable experiment tracking (MLflow)
+- `--run_name` / `-r` : override run name when tracking
+
+Example (run an experiment non-interactively):
 
 ```bash
+python main.py -e DarkRoomEasy -s 0 -a -t -r "test-run"
+```
+
+MLflow (optional)
+- To enable experiment tracking, start an MLflow server and point runs at it. Example local server:
+
+```bash
+mkdir -p mlflow_data/data_local mlflow_data/artifacts
 mlflow server \
---backend-store-uri "file:///<mlflow_dir_abspath>/data_local" \
---default-artifact-root "file:///<mlflow_dir_abspath>/artifacts" \
---host localhost \
---port 5000
+	--backend-store-uri "file:///$PWD/mlflow_data/data_local" \
+	--default-artifact-root "file:///$PWD/mlflow_data/artifacts" \
+	--host localhost --port 5000
 ```
 
-Now we have a local server running on port 5000. You can check [http://localhost:5000](http://localhost:5000).
+Project layout (top-level)
+- `main.py` — experiment chooser and runner
+- `experiments/` — per-experiment directories with `config.yaml` and `experiment.py`
+- `src/` — core library (environments, agents, datasets, transformers, workflow utils)
+- `tests/` — unit tests
 
-###### 5. Run the experiment
-
-Go to the `scripts` folder. It contains directories with the names of the environments on which the experiments were run. Each directory contains scripts for training and evaluating models (to change hyperparameters, you need to change the values ​​inside the script).
+Running tests
 
 ```bash
-python scripts/<experiment_name>/<experiment_script>.py
+pip install pytest
+pytest -q
 ```
+
+Notes
+- CUDA is optional. If you have GPUs available and `torch` built with CUDA, the code will use `cuda` automatically.
+- The repository is a research sandbox; configs and scripts may assume specific hyperparameters and are intended for experimentation rather than production use.
+
+If you want, I can also update `pyproject.toml` or add a `requirements.txt` and a short CONTRIBUTING guideline. Tell me which you'd prefer.
