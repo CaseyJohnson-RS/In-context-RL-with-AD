@@ -18,7 +18,7 @@ Installing the CUDA toolchain is optional, and I'll leave that for you to explor
 ###### 1. Create a virtual environment
 
 If you only have one Python interpreter installed, you can create a virtual environment with the command:
-```bash
+
 # In-Context Reinforcement Learning with Algorithm Distillation
 
 A sandbox for experiments on algorithm distillation in reinforcement learning. The codebase provides small environments, experiment configs, and training/evaluation scripts to study how learning algorithms can be distilled into model behavior.
