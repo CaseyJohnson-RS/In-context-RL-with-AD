@@ -9,20 +9,10 @@ from .ARTransformerBase import ARTransformerBase
 class ARConTransformer(ARTransformerBase):
     """
     Autoregressive transformer with interleaved action-reward tokens.
-    Creates doubled sequence [a1, r1, a2, r2, ..., aL, rL] for explicit 
-    action-reward pairing in attention.
-    
-    Architecture:
-        actions -> Embedding(n_actions→d_model)
-        rewards -> Linear(1→d_model)
-        Interleave [action_emb, reward_emb] -> (B, 2L, d_model)
-        -> PosEnc(2*max_len) -> Causal Transformer -> head(-2)
-    
-    Args:
-        Same as ARTransformerBase; max_len is action steps (sequence 2*max_len).
+    Predicts ONLY the next action.
     """
-    
-    def __init__(
+
+    def __init__(   
         self,
         n_actions: int,
         d_model: int = 64,
@@ -32,60 +22,60 @@ class ARConTransformer(ARTransformerBase):
         max_len: int = 200,
         dropout: float = 0.1,
     ) -> None:
-        # Double max_len for interleaved sequence
         super().__init__(
-            n_actions, d_model, nhead, num_layers, 
-            dim_feedforward, max_len * 2, dropout
+            n_actions=n_actions,
+            d_model=d_model,
+            nhead=nhead,
+            num_layers=num_layers,
+            dim_feedforward=dim_feedforward,
+            max_len=max_len * 2,   # interleaved
+            dropout=dropout,
         )
-        
+
         self.action_emb = nn.Embedding(n_actions, d_model)
         self.reward_emb = nn.Linear(1, d_model)
 
-        # Positional encoding
         self.pos_enc = PositionalEncoding(d_model, max_len=max_len * 2)
-    
-    def sequence_encode(self, actions: Tensor, rewards: Tensor) -> Tensor:
+
+    def sequence_encode(self, X: Tensor) -> Tensor:
         """
-        Interleave action/reward embeddings into doubled sequence.
-        
         Args:
-            actions: (B, L) or (L,) action indices [0, n_actions).
-            rewards: (B, L) or (L,) reward scalars.
-            
+            X: (B, 2, L) or (2, L)
+                X[:,0] = actions (int)
+                X[:,1] = rewards (float)
+
         Returns:
-            Interleaved embeddings (B, 2L, d_model): [a1,r1,a2,r2,...].
+            (B, 2L, d_model)
         """
-        # Batch normalization
-        if actions.dim() == 1:
-            actions = actions.unsqueeze(0)
-            rewards = rewards.unsqueeze(0)
-        
-        B, L = actions.shape
-        
-        # Embeddings
-        a_emb = self.action_emb(actions.long())      # (B, L, d_model)
-        r_emb = self.reward_emb(rewards.unsqueeze(-1))  # (B, L, 1) -> (B, L, d_model)
-        
-        # Interleave: [a1, r1, a2, r2, ...]
-        interleaved = torch.stack([a_emb, r_emb], dim=2)  # (B, L, 2, d_model)
-        x = interleaved.reshape(B, L * 2, self.d_model)   # (B, 2L, d_model)
-        
-        # Positional encoding (handles 2*max_len)
-        x = self.pos_enc(x)
-        
-        return x
-    
-    def decode_action(self, x: Tensor) -> Tensor:
+        if X.dim() == 2:
+            X = X.unsqueeze(0)
+
+        B, _, L = X.shape
+
+        actions = X[:, 0].long()          # (B, L)
+        rewards = X[:, 1].unsqueeze(-1)   # (B, L, 1)
+
+        a_emb = self.action_emb(actions)  # (B, L, D)
+        r_emb = self.reward_emb(rewards)  # (B, L, D)
+
+        out = torch.empty(B, 2 * L, self.d_model, device=X.device)
+        out[:, 0::2] = a_emb
+        out[:, 1::2] = r_emb
+
+        out = self.pos_enc(out)
+
+        return out
+
+    def decode_action(self, X: Tensor) -> Tensor:
         """
-        Predict next action from last action token (position -2).
-        
+        Use the last ACTION token (position -2).
+
         Args:
-            x: (B, 2L, d_model) transformer output.
-            
+            X: (B, 2L, d_model)
+
         Returns:
-            Logits (B, n_actions) from final action embedding.
+            (B, n_actions)
         """
-        # Sequence: [... a_L-1, r_L-1, a_L, r_L]
-        # Predict from a_L (index -2)
-        last_action_emb = x[:, -2]
-        return self.action_head(last_action_emb)
+        last_action_token = X[:, -2, :]      # (B, D)
+        logits = self.action_head(last_action_token)
+        return logits

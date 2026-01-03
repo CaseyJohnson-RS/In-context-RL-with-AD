@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from abc import ABC, abstractmethod
 from typing import Optional
+from abc import ABC, abstractmethod
 
 
 Tensor = torch.Tensor
@@ -30,8 +30,12 @@ class ARTransformerBase(nn.Module, ABC):
         dim_feedforward: int = 2048,
         max_len: int = 200,
         dropout: float = 0.1,
+        device: str | None = None
     ) -> None:
         super().__init__()
+
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
         # Config (frozen for reproducibility)
         self.n_actions = n_actions
@@ -65,6 +69,8 @@ class ARTransformerBase(nn.Module, ABC):
         
         # Apply weight init
         self.apply(self._init_weights)
+
+        self.to(device)
     
     def _init_weights(self, module: nn.Module) -> None:
         """Xavier init for stability."""
@@ -73,8 +79,20 @@ class ARTransformerBase(nn.Module, ABC):
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
     
+    def _generate_causal_mask(
+        self, seq_len: int, device: torch.device
+    ) -> Optional[Tensor]:
+        """Generate causal attention mask."""
+        if seq_len == 1:
+            return None
+        mask = torch.full(
+            (seq_len, seq_len), float("-inf"), device=device, dtype=torch.float
+        )
+        mask.triu_(1)  # Upper triangle masked
+        return mask
+
     @abstractmethod
-    def sequence_encode(self, actions: Tensor, rewards: Tensor) -> Tensor:
+    def sequence_encode(self, X: Tensor) -> Tensor:
         """
         Encode action/reward tensors into transformer embeddings.
         
@@ -88,7 +106,7 @@ class ARTransformerBase(nn.Module, ABC):
         pass
     
     @abstractmethod
-    def decode_action(self, x: Tensor) -> Tensor:
+    def decode_action(self, X: Tensor) -> Tensor:
         """
         Decode transformer output to action logits.
         
@@ -100,34 +118,19 @@ class ARTransformerBase(nn.Module, ABC):
         """
         pass
     
-    def _generate_causal_mask(
-        self, seq_len: int, device: torch.device
-    ) -> Optional[Tensor]:
-        """Generate causal attention mask."""
-        if seq_len == 1:
-            return None
-        mask = torch.full(
-            (seq_len, seq_len), float("-inf"), device=device, dtype=torch.float
-        )
-        mask.triu_(1)  # Upper triangle masked
-        return mask
-    
-    def forward(
-        self, actions: Tensor, rewards: Tensor, padding_mask: Optional[Tensor] = None
-    ) -> Tensor:
+    def forward(self, X: Tensor) -> Tensor:
         """
         Forward pass with causal masking.
         
         Args:
             actions: (B, L) or (L,) action sequence.
             rewards: (B, L) or (L,) reward sequence.
-            padding_mask: (B, L) optional padding mask.
             
         Returns:
             Action logits (B, L, n_actions).
         """
         # Encode sequence
-        x = self.sequence_encode(actions, rewards)  # (B, L, D)
+        x = self.sequence_encode(X)  # (B, L, D)
         
         batch_size, seq_len = x.shape[:2]
         
@@ -140,13 +143,12 @@ class ARTransformerBase(nn.Module, ABC):
         # Transformer forward
         x = self.transformer(
             x, 
-            mask=causal_mask,
-            src_key_padding_mask=padding_mask
+            mask=causal_mask
         )  # (B, L, D)
         
         x = self.ln_final(x)
         
         # Decode to actions
-        logits = self.decode_action(x)  # (B, L, n_actions)
+        logits = self.decode_action(x)  # (B, n_actions)
         
         return logits

@@ -71,9 +71,6 @@ def __traces_to_sequences(traces: List[List[Tuple]], agent: RLAgent,  seq_len: i
                 for i in range(trace_step_len):
                     sequence[i].append(trace_step[i])
             
-            for i in range(action_idx):
-                sequence[i].append(trace[t][i])
-            
             sequences.append(sequence)
             targets.append(target)
 

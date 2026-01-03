@@ -1,0 +1,53 @@
+# General configs
+seed: 42
+autoconfirm: true
+track_experiment: true
+experiment_name: "K-Armed Bandit AD"  
+run_name: "AR Transformer"
+
+# Environment configs (KArmedBandit)
+
+env_args:
+  k: 10
+  sigma: 1.0
+
+# Agent configs (ThompsonSampling)
+
+agent_args:
+  k: 10
+
+# Transformer model configs
+
+model: ARConTransformer
+model_args:
+  n_actions: 10
+  d_model: 64
+  nhead: 4
+  num_layers: 4
+  dim_feedforward: 2048
+  max_len: 100
+  dropout: 0
+
+# Learning traces configs
+
+trace_count: 50
+trace_len: 300
+seq_len: 100
+seq_per_trace: 100
+
+# Dataloader configs
+
+dataloader_args:
+  shuffle: true
+  batch_size: 4
+pad_action: 0
+
+# Train configs
+
+lr: 0.001
+epochs: 20
+
+# Test configs
+
+test_episodes: 25
+test_episode_len: 500

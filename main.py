@@ -114,7 +114,6 @@ console.rule('[magenta]Load configs and environment variables[/magenta]')
 load_environ()
 GENERAL_CONFIG = pasre_args()
 EXP_CONFIGS = load_experiments()
-print(GENERAL_CONFIG)
 console.rule('[magenta]Initializing[/magenta]')
 
 exp_index = choose_experiment(GENERAL_CONFIG, EXP_CONFIGS)

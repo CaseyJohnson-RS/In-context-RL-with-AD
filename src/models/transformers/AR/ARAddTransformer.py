@@ -8,18 +8,17 @@ from .ARTransformerBase import ARTransformerBase
 class ARAddTransformer(ARTransformerBase):
     """
     Autoregressive transformer fusing action+reward via element-wise addition.
-    Creates compact sequence where each timestep embeds action_t + reward_t.
-    
+
+    Each timestep embeds `action_t + reward_t` as a single vector, then passes
+    through positional encoding and a causal transformer.
+
     Architecture:
-        actions -> Embedding(n_actions→d_model)
-        rewards -> Linear(1→d_model)
-        Add: action_emb + reward_emb -> (B, L, d_model)
-        -> PosEnc -> Causal Transformer -> head(-1)
-    
-    Args:
-        Same as ARTransformerBase.
+        actions -> Embedding(n_actions → d_model)
+        rewards -> Linear(1 → d_model)
+        fused: action_emb + reward_emb → (B, L, d_model)
+        → PositionalEncoding → Transformer → action_head
     """
-    
+
     def __init__(
         self,
         n_actions: int,
@@ -31,54 +30,50 @@ class ARAddTransformer(ARTransformerBase):
         dropout: float = 0.1,
     ) -> None:
         super().__init__(
-            n_actions, d_model, nhead, num_layers, 
-            dim_feedforward, max_len, dropout
+            n_actions=n_actions,
+            d_model=d_model,
+            nhead=nhead,
+            num_layers=num_layers,
+            dim_feedforward=dim_feedforward,
+            max_len=max_len,
+            dropout=dropout,
         )
-        
+
         self.action_emb = nn.Embedding(n_actions, d_model)
         self.reward_emb = nn.Linear(1, d_model)
-
-        # Positional encoding
         self.pos_enc = PositionalEncoding(d_model, max_len=max_len)
-    
-    def sequence_encode(self, actions: Tensor, rewards: Tensor) -> Tensor:
+
+    def sequence_encode(self, X: Tensor) -> Tensor:
         """
-        Fuse action/reward via addition into per-step embedding.
-        
+        Encode a sequence of actions and rewards into fused embeddings.
+
         Args:
-            actions: (B, L) or (L,) action indices [0, n_actions).
-            rewards: (B, L) or (L,) reward scalars.
-            
+            X: (B, 2, L) tensor, where X[:, 0, :] = actions, X[:, 1, :] = rewards
+
         Returns:
-            Fused embeddings (B, L, d_model).
+            Tensor of shape (B, L, d_model) ready for transformer input.
         """
-        # Batch normalization
-        if actions.dim() == 1:
-            actions = actions.unsqueeze(0)
-            rewards = rewards.unsqueeze(0)
-        
-        # Embeddings
-        a_emb = self.action_emb(actions.long())         # (B, L, d_model)
-        r_emb = self.reward_emb(rewards.unsqueeze(-1))  # (B, L, 1) -> (B, L, d_model)
-        
-        # Element-wise fusion
-        x = a_emb + r_emb  # (B, L, d_model)
-        
-        # Positional encoding
+        if X.dim() == 2:
+            X = X.unsqueeze(0)  # (1, 2, L)
+
+        actions = X[:, 0, :]  # (B, L)
+        rewards = X[:, 1, :]  # (B, L)
+
+        a_emb = self.action_emb(actions.long())               # (B, L, d_model)
+        r_emb = self.reward_emb(rewards.unsqueeze(-1))       # (B, L, 1) → (B, L, d_model)
+        x = a_emb + r_emb                                     # fused embedding
+
         x = self.pos_enc(x)
-        
         return x
-    
-    def decode_action(self, x: Tensor) -> Tensor:
+
+    def decode_action(self, X: Tensor) -> Tensor:
         """
-        Predict next action from final fused timestep.
-        
+        Decode transformer output into next-action logits.
+
         Args:
-            x: (B, L, d_model) transformer output.
-            
+            X: (B, L, d_model) transformer output
+
         Returns:
-            Logits (B, n_actions).
+            Tensor of shape (B, n_actions)
         """
-        # Last position (a_L + r_L)
-        final_emb = x[:, -1]
-        return self.action_head(final_emb)
+        return self.action_head(X[:, -1])
